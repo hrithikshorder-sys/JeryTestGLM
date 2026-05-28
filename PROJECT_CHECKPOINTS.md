@@ -750,3 +750,117 @@ Git commit:
 ```text
 ae7416b Convert BigModel SSE to OpenAI stream
 ```
+
+## 17. Chatbox Exclusion Rules
+
+Date: 2026-05-28
+
+### Purpose
+
+Chatbox mode must not pass BigModel-native events directly to the client. Chatbox validates the streamed response against an OpenAI-compatible shape. Any non-OpenAI object in a `data:` line can break rendering.
+
+### Must Exclude From Chatbox Output
+
+The following BigModel SSE payloads should not be returned directly to Chatbox:
+
+```text
+data: {"think":"..."}
+data: {"search":"..."}
+data: {"webSearch":"..."}
+data: [{"title":"...","link":"..."}]
+event:webSearch
+event:add
+id:...
+```
+
+Reason:
+
+- `think` is internal reasoning/debug text.
+- `webSearch` and search result arrays are tool metadata, not assistant text.
+- `event:` and `id:` are SSE metadata lines, not OpenAI JSON chunks.
+- Raw arrays do not contain `choices`.
+
+### Must Not Return
+
+Do not return these shapes in Chatbox mode:
+
+```text
+data: {"think":"1"}
+data: [{"content":"search result"}]
+data: {"content":"Hello"}
+```
+
+Even `{"content":"Hello"}` is invalid for Chatbox unless wrapped as OpenAI stream format.
+
+### Required Chatbox Shape
+
+Every JSON `data:` line returned to Chatbox must contain either:
+
+```json
+{
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "Hello"
+      },
+      "finish_reason": null
+    }
+  ]
+}
+```
+
+or an OpenAI-compatible error object:
+
+```json
+{
+  "error": {
+    "message": "error message",
+    "type": "proxy_error"
+  }
+}
+```
+
+The stream should end with:
+
+```text
+data: [DONE]
+```
+
+### Current Implementation Rule
+
+In `reverse_proxy_server.py`:
+
+- `openai_response_mode = True` only when incoming JSON has `messages`.
+- `convert_bigmodel_sse_to_openai_sse()` filters BigModel-only events.
+- `extract_bigmodel_answer_text()` only extracts display text from known text fields.
+- Non-display chunks are skipped.
+
+### Debug Checklist
+
+If Chatbox fails with type validation:
+
+1. Check whether the request body contains `messages`.
+2. Confirm proxy log contains request conversion message.
+3. Inspect response body.
+4. If any raw `data: {"think": ...}` appears, response conversion is not active.
+5. If any JSON `data:` line lacks `choices` or `error`, Chatbox will reject it.
+6. Confirm response content type is:
+
+```text
+text/event-stream; charset=utf-8
+```
+
+### Checkpoint Result
+
+Expected Chatbox response example:
+
+```text
+data: {"id":"chatcmpl-bigmodel-proxy","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-bigmodel-proxy","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-bigmodel-proxy","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: [DONE]
+```

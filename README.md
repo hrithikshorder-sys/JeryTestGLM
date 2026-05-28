@@ -385,3 +385,46 @@ Validation command:
 ```powershell
 python -m py_compile reverse_proxy_server.py proxy_gui.py main.py
 ```
+
+## Chatbox Exclusion Checklist
+
+When `是否使用 CHATBOX` is enabled, the proxy must exclude BigModel-native SSE details from the final response.
+
+Do not send these raw chunks to Chatbox:
+
+```text
+data: {"think":"1"}
+data: [{"title":"...","link":"..."}]
+event:webSearch
+event:add
+id:...
+```
+
+These are BigModel/internal SSE details. Chatbox expects OpenAI-compatible chunks only.
+
+Valid Chatbox stream chunk:
+
+```text
+data: {"choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}
+```
+
+Valid stream ending:
+
+```text
+data: [DONE]
+```
+
+If Chatbox shows:
+
+```text
+Type validation failed
+Invalid input: expected array at path ["choices"]
+```
+
+Check these items:
+
+- The request body sent to the proxy has `messages`.
+- The proxy log says it converted OpenAI messages to BigModel prompt.
+- The response does not include raw `think`, `webSearch`, `event`, or `id` lines.
+- Every JSON `data:` line has `choices` or `error`.
+- Response content type is `text/event-stream; charset=utf-8`.
