@@ -1,0 +1,24 @@
+{
+  "active_profile": "claude_web",
+  "profiles": {
+    "bigmodel": {
+      "provider": "bigmodel",
+      "base_url": "https://bigmodel.cn",
+      "target_url": "https://bigmodel.cn/trialcenter/modeltrial/text?modelCode=glm-5.1"
+    },
+    "claude_web": {
+      "provider": "claude_web",
+      "base_url": "https://claude.ai",
+      "organization_id": "",
+      "conversation_id": "",
+      "cookie": "",
+      "device_id": "",
+      "user_agent": "",
+      "payload_template": {
+        "prompt": "HI",
+        "attachments": [],
+        "files": []
+      }
+    }
+  }
+}

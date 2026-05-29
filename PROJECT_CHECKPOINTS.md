@@ -864,3 +864,58 @@ data: {"id":"chatcmpl-bigmodel-proxy","object":"chat.completion.chunk","choices"
 
 data: [DONE]
 ```
+
+## 19. Claude Profile Save Checkpoint
+
+Date: 2026-05-29
+
+### Problem
+
+The UI had a `Create JSON` action for `profile_config.local.json`, but that only created a template. It did not persist the values the user typed into the Claude fields.
+
+### Fix
+
+Added a `Record` action for the `ClaudeAI` section.
+
+Behavior:
+
+- Save the current Claude UI fields into `profile_config.local.json`.
+- Set `active_profile` to `claude_web`.
+- Keep `bigmodel` in the same profile file.
+- Reload the profile list after saving.
+
+### Fields Saved
+
+```text
+base_url
+organization_id
+conversation_id
+cookie
+device_id
+user_agent
+payload_template
+```
+
+### Profile Visibility Rules
+
+- `bigmodel` selected: show `Credentials`, hide `ClaudeAI`.
+- `claude_web` selected: hide `Credentials`, show `ClaudeAI`.
+
+### Request Routing Rule
+
+- `bigmodel` sends the BigModel SSE payload.
+- `claude_web` routes the main send action to the Claude Web path.
+
+### Verification
+
+Run:
+
+```powershell
+python -m py_compile reverse_proxy_server.py proxy_gui.py main.py
+```
+
+Expected:
+
+- No syntax errors.
+- `profile_config.local.json` includes both profiles.
+- `Record` persists Claude settings instead of only creating a template.

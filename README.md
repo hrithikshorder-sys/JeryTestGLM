@@ -428,3 +428,28 @@ Check these items:
 - The response does not include raw `think`, `webSearch`, `event`, or `id` lines.
 - Every JSON `data:` line has `choices` or `error`.
 - Response content type is `text/event-stream; charset=utf-8`.
+
+## Profile Save
+
+The app stores provider settings in `profile_config.local.json`.
+
+Current profile behavior:
+
+- `bigmodel` shows `Credentials`.
+- `claude_web` shows `ClaudeAI`.
+- Switching profiles does not restart the proxy.
+- The `Record` button on the `ClaudeAI` section writes the current Claude fields back into `profile_config.local.json`.
+
+Claude fields saved by `Record`:
+
+```text
+base_url
+organization_id
+conversation_id
+cookie
+device_id
+user_agent
+payload_template
+```
+
+If `claude_web` is selected, the main `Send` button routes through the Claude path instead of the BigModel path.
