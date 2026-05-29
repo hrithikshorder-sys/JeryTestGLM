@@ -714,6 +714,146 @@ data: {"id":"chatcmpl-bigmodel-proxy","object":"chat.completion.chunk","choices"
 data: [DONE]
 ```
 
+## 18. ClaudeAI Web Reverse Proxy Page
+
+Date: 2026-05-29
+
+### Goal
+
+Add a second GUI page named `ClaudeAI` with the same local-proxy testing concept as the original page, but targeting Claude Web frontend reverse proxy behavior.
+
+This is not the official Anthropic API mode. It is a manual frontend-simulation mode:
+
+```text
+User logs in to Claude Web
+User manually copies Network fields
+App stores nothing automatically
+Proxy only formats requests and responses
+```
+
+### GUI Page
+
+Added a `ttk.Notebook` with two tabs:
+
+```text
+BigModel
+ClaudeAI
+```
+
+The ClaudeAI tab includes:
+
+```text
+Base URL
+Organization ID
+Conversation ID
+Cookie
+Anthropic Device ID
+User-Agent
+Payload Template
+Message
+Response
+ClaudeAI Log
+```
+
+### Claude Web Completion Endpoint
+
+The proxy builds:
+
+```text
+POST https://claude.ai/api/organizations/{organization_id}/chat_conversations/{conversation_id}/completion
+```
+
+Required manual fields:
+
+```text
+organization_id
+conversation_id
+cookie
+```
+
+Optional but recommended:
+
+```text
+anthropic-device-id
+user-agent
+payload_template
+```
+
+### Local Proxy Request
+
+The GUI sends this local request:
+
+```text
+POST http://localhost:8080/claude-web/completion
+```
+
+Payload shape:
+
+```json
+{
+  "provider": "claude_web",
+  "messages": [
+    {
+      "role": "user",
+      "content": "HI"
+    }
+  ],
+  "stream": true,
+  "claude": {
+    "base_url": "https://claude.ai",
+    "organization_id": "...",
+    "conversation_id": "...",
+    "cookie": "...",
+    "device_id": "...",
+    "user_agent": "...",
+    "payload_template": "{\"prompt\":\"HI\",\"attachments\":[],\"files\":[]}"
+  }
+}
+```
+
+### Adapter Flow
+
+```text
+OpenAI messages
+-> Claude Web payload template
+-> Claude Web completion endpoint
+-> Claude Web SSE
+-> OpenAI-compatible SSE choices
+```
+
+### Security Rule
+
+Do not commit these values:
+
+```text
+Cookie
+sessionKey
+routingHint
+cf_clearance
+__cf_bm
+Anthropic session cookies
+```
+
+The app only provides manual input fields. It does not read browser cookies or browser network traffic automatically.
+
+### Verification
+
+Syntax check:
+
+```powershell
+python -m py_compile reverse_proxy_server.py proxy_gui.py main.py
+```
+
+Local mocked proxy test confirmed:
+
+```text
+POST /claude-web/completion
+-> https://claude.ai/api/organizations/org-test/chat_conversations/conv-test/completion
+-> {"prompt": "HI", "attachments": [], "files": []}
+-> data: {"choices":[...]}
+-> data: [DONE]
+```
+
 ### Verification
 
 Run:

@@ -428,3 +428,65 @@ Check these items:
 - The response does not include raw `think`, `webSearch`, `event`, or `id` lines.
 - Every JSON `data:` line has `choices` or `error`.
 - Response content type is `text/event-stream; charset=utf-8`.
+
+## ClaudeAI Web Reverse Proxy
+
+The GUI has a second tab:
+
+```text
+ClaudeAI
+```
+
+This tab is for manual Claude Web frontend simulation. It does not use an Anthropic API key and does not automatically read browser cookies.
+
+Manual fields:
+
+```text
+Base URL
+Organization ID
+Conversation ID
+Cookie
+Anthropic Device ID
+User-Agent
+Payload Template
+```
+
+Local proxy endpoint:
+
+```text
+POST http://localhost:8080/claude-web/completion
+```
+
+Claude Web target endpoint:
+
+```text
+POST https://claude.ai/api/organizations/{organization_id}/chat_conversations/{conversation_id}/completion
+```
+
+Adapter flow:
+
+```text
+OpenAI messages -> Claude Web payload template
+Claude Web SSE -> OpenAI-compatible choices stream
+```
+
+ClaudeAI Network SOP:
+
+1. Open `https://claude.ai/new`.
+2. Log in manually.
+3. Open DevTools Network and enable `Preserve log`.
+4. Send `HI`.
+5. Find the `completion` POST request.
+6. Copy `organization_id` and `conversation_id` from the request URL.
+7. Copy `Cookie`, `Anthropic-Device-Id`, and `User-Agent` from Request Headers.
+8. Copy Request Payload JSON into `Payload Template`.
+
+Do not commit these values:
+
+```text
+Cookie
+sessionKey
+routingHint
+cf_clearance
+__cf_bm
+```

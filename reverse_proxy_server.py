@@ -56,6 +56,20 @@ def sanitize_headers(headers):
     return safe_headers
 
 
+def sanitize_payload(payload):
+    if isinstance(payload, dict):
+        safe_payload = {}
+        for key, value in payload.items():
+            if key.lower() in SENSITIVE_HEADERS or key.lower() in {"sessionkey", "routinghint"}:
+                safe_payload[key] = "***"
+            else:
+                safe_payload[key] = sanitize_payload(value)
+        return safe_payload
+    if isinstance(payload, list):
+        return [sanitize_payload(item) for item in payload]
+    return payload
+
+
 def apply_env_auth_headers(headers):
     auth = config_value('authorization', 'BIGMODEL_AUTH')
     org_id = config_value('organization', 'BIGMODEL_ORG')
@@ -182,6 +196,122 @@ def convert_bigmodel_sse_to_openai_sse(content):
     output.append(b"data: [DONE]\n\n")
     return b"".join(output)
 
+
+def extract_last_user_message(messages):
+    if not isinstance(messages, list):
+        return ""
+    for message in reversed(messages):
+        if not isinstance(message, dict) or message.get("role") != "user":
+            continue
+        return extract_text_content(message.get("content", ""))
+    return ""
+
+
+def set_nested_text(payload, text):
+    changed = False
+    if isinstance(payload, dict):
+        for key in ("prompt", "text", "content", "message"):
+            if isinstance(payload.get(key), str):
+                payload[key] = text
+                changed = True
+        for value in payload.values():
+            if isinstance(value, (dict, list)):
+                changed = set_nested_text(value, text) or changed
+    elif isinstance(payload, list):
+        for item in payload:
+            if isinstance(item, (dict, list)):
+                changed = set_nested_text(item, text) or changed
+    return changed
+
+
+def build_claude_web_payload(body):
+    claude_config = body.get("claude", {}) if isinstance(body.get("claude"), dict) else {}
+    template = claude_config.get("payload_template") or body.get("payload_template") or {}
+    message_text = extract_last_user_message(body.get("messages", []))
+
+    if isinstance(template, str):
+        try:
+            payload = json.loads(template) if template.strip() else {}
+        except json.JSONDecodeError:
+            payload = {}
+    elif isinstance(template, dict):
+        payload = json.loads(json.dumps(template))
+    else:
+        payload = {}
+
+    if not payload:
+        payload = {
+            "prompt": message_text,
+            "attachments": [],
+            "files": [],
+        }
+    elif message_text and not set_nested_text(payload, message_text):
+        payload["prompt"] = message_text
+
+    return payload
+
+
+def claude_web_headers(claude_config):
+    headers = {
+        "Accept": "text/event-stream",
+        "Content-Type": "application/json",
+        "Origin": "https://claude.ai",
+        "Referer": "https://claude.ai/new",
+        "Anthropic-Client-Platform": "web_claude_ai",
+    }
+    cookie = str(claude_config.get("cookie", "")).strip()
+    device_id = str(claude_config.get("device_id", "")).strip()
+    user_agent = str(claude_config.get("user_agent", "")).strip()
+
+    if cookie:
+        headers["Cookie"] = cookie
+    if device_id:
+        headers["Anthropic-Device-Id"] = device_id
+    if user_agent:
+        headers["User-Agent"] = user_agent
+    return headers
+
+
+def extract_claude_web_text(payload):
+    if not isinstance(payload, dict):
+        return ""
+    for key in ("completion", "text", "content", "delta", "message"):
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            return value
+    for value in payload.values():
+        if isinstance(value, dict):
+            text = extract_claude_web_text(value)
+            if text:
+                return text
+        elif isinstance(value, list):
+            for item in value:
+                text = extract_claude_web_text(item)
+                if text:
+                    return text
+    return ""
+
+
+def convert_claude_web_sse_to_openai_sse(content):
+    output = [openai_stream_chunk(role="assistant")]
+    for raw_line in content.decode("utf-8", errors="ignore").splitlines():
+        line = raw_line.strip()
+        if not line.startswith("data:"):
+            continue
+        data_text = line[5:].strip()
+        if not data_text or data_text == "[DONE]":
+            continue
+        try:
+            payload = json.loads(data_text)
+        except json.JSONDecodeError:
+            continue
+        text = extract_claude_web_text(payload)
+        if text:
+            output.append(openai_stream_chunk(content=text))
+    output.append(openai_stream_chunk(finish_reason="stop"))
+    output.append(b"data: [DONE]\n\n")
+    return b"".join(output)
+
 class ReverseProxyServer:
     def __init__(self):
         self.app = Flask(__name__)
@@ -237,13 +367,29 @@ class ReverseProxyServer:
                     response = requests.get(target_url, headers=headers, params=request.args, data=data, timeout=30)
                 elif request.method == 'POST':
                     json_data = request.get_json(silent=True)
-                    if isinstance(json_data, dict) and "messages" in json_data:
+                    if isinstance(json_data, dict) and json_data.get("provider") == "claude_web":
+                        claude_config = json_data.get("claude", {}) if isinstance(json_data.get("claude"), dict) else {}
+                        base_url = str(claude_config.get("base_url", "https://claude.ai")).rstrip("/")
+                        org_id = str(claude_config.get("organization_id", "")).strip()
+                        conversation_id = str(claude_config.get("conversation_id", "")).strip()
+                        if not org_id or not conversation_id:
+                            return jsonify({"error": "Claude Web requires organization_id and conversation_id"}), 400
+                        target_url = (
+                            f"{base_url}/api/organizations/{org_id}/chat_conversations/"
+                            f"{conversation_id}/completion"
+                        )
+                        headers = claude_web_headers(claude_config)
+                        json_data = build_claude_web_payload(json_data)
+                        data = None
+                        openai_response_mode = "claude_web"
+                        logging.info("Detected Claude Web payload; converted OpenAI messages to Claude Web payload")
+                    elif isinstance(json_data, dict) and "messages" in json_data:
                         json_data, model_id = convert_messages_to_bigmodel(json_data)
                         target_url = f"{base_url}/api/biz/trial/response/v4/sse/{model_id}"
                         data = None
-                        openai_response_mode = True
+                        openai_response_mode = "bigmodel"
                         logging.info("Detected Chatbox/OpenAI messages payload; converted to BigModel prompt payload")
-                    logging.info(f"POST數據: {json_data}")
+                    logging.info(f"POST數據: {sanitize_payload(json_data)}")
                     if json_data is not None:
                         response = requests.post(target_url, headers=headers, json=json_data, timeout=30)
                     else:
@@ -271,10 +417,14 @@ class ReverseProxyServer:
                 excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
                 headers = [(name, value) for (name, value) in response.headers.items() if name.lower() not in excluded_headers]
                 if openai_response_mode and response.status_code == 200:
-                    converted_content = convert_bigmodel_sse_to_openai_sse(response.content)
+                    if openai_response_mode == "claude_web":
+                        converted_content = convert_claude_web_sse_to_openai_sse(response.content)
+                        logging.info("Converted Claude Web SSE response to OpenAI-compatible SSE chunks")
+                    else:
+                        converted_content = convert_bigmodel_sse_to_openai_sse(response.content)
+                        logging.info("Converted BigModel SSE response to OpenAI-compatible SSE chunks")
                     headers = [(name, value) for (name, value) in headers if name.lower() != 'content-type']
                     headers.append(('Content-Type', 'text/event-stream; charset=utf-8'))
-                    logging.info("Converted BigModel SSE response to OpenAI-compatible SSE chunks")
                     return Response(converted_content, response.status_code, headers)
 
                 return Response(response.content, response.status_code, headers)

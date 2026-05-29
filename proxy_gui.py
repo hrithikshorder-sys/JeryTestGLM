@@ -46,9 +46,22 @@ class ProxyGUI:
         self.root.after(300, self.auto_start_debug)
         
     def create_widgets(self):
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
+
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        self.bigmodel_tab = ttk.Frame(self.notebook)
+        self.claude_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.bigmodel_tab, text="BigModel")
+        self.notebook.add(self.claude_tab, text="ClaudeAI")
+
         # 創建主框架
-        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame = ttk.Frame(self.bigmodel_tab, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.bigmodel_tab.columnconfigure(0, weight=1)
+        self.bigmodel_tab.rowconfigure(0, weight=1)
         
         # 標題
         title_label = ttk.Label(main_frame, text="反向代理控制器", font=("Arial", 16, "bold"))
@@ -176,11 +189,166 @@ class ProxyGUI:
         message_frame.rowconfigure(4, weight=1)
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
+        self.create_claude_widgets()
+
+    def create_claude_widgets(self):
+        main_frame = ttk.Frame(self.claude_tab, padding="10")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.claude_tab.columnconfigure(0, weight=1)
+        self.claude_tab.rowconfigure(0, weight=1)
+
+        title_label = ttk.Label(main_frame, text="ClaudeAI Reverse Proxy", font=("Arial", 16, "bold"))
+        title_label.grid(row=0, column=0, columnspan=2, pady=10)
+
+        proxy_frame = ttk.LabelFrame(main_frame, text="Proxy", padding="5")
+        proxy_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        self.claude_proxy_address_var = tk.StringVar(value=self.proxy_server.get_proxy_address())
+        ttk.Label(proxy_frame, textvariable=self.claude_proxy_address_var, font=("Arial", 10)).grid(
+            row=0, column=0, sticky=(tk.W, tk.E), padx=5, pady=5
+        )
+
+        auth_frame = ttk.LabelFrame(main_frame, text="Claude Web Manual Fields", padding="5")
+        auth_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+
+        self.claude_base_url_entry = self.add_labeled_entry(auth_frame, 0, "Base URL:", "https://claude.ai")
+        self.claude_org_entry = self.add_labeled_entry(auth_frame, 1, "Organization ID:", "")
+        self.claude_conversation_entry = self.add_labeled_entry(auth_frame, 2, "Conversation ID:", "")
+        self.claude_device_entry = self.add_labeled_entry(auth_frame, 3, "Anthropic Device ID:", "")
+        self.claude_user_agent_entry = self.add_labeled_entry(auth_frame, 4, "User-Agent:", "")
+
+        ttk.Label(auth_frame, text="Cookie:").grid(row=5, column=0, sticky=tk.W, padx=5, pady=2)
+        self.claude_cookie_text = scrolledtext.ScrolledText(auth_frame, height=4, width=70)
+        self.claude_cookie_text.grid(row=5, column=1, sticky=(tk.W, tk.E), padx=5, pady=2)
+
+        ttk.Label(auth_frame, text="Payload Template:").grid(row=6, column=0, sticky=tk.W, padx=5, pady=2)
+        self.claude_payload_text = scrolledtext.ScrolledText(auth_frame, height=6, width=70)
+        self.claude_payload_text.grid(row=6, column=1, sticky=(tk.W, tk.E), padx=5, pady=2)
+        self.claude_payload_text.insert(
+            tk.END,
+            json.dumps({"prompt": "HI", "attachments": [], "files": []}, ensure_ascii=False, indent=2),
+        )
+
+        auth_buttons = ttk.Frame(auth_frame)
+        auth_buttons.grid(row=7, column=0, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=4)
+        ttk.Button(auth_buttons, text="Open Claude", command=self.open_claude_page).grid(row=0, column=0, padx=4)
+        ttk.Button(auth_buttons, text="Network SOP", command=self.show_claude_sop).grid(row=0, column=1, padx=4)
+
+        message_frame = ttk.LabelFrame(main_frame, text="Message Test", padding="5")
+        message_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        ttk.Label(message_frame, text="Message:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=2)
+        self.claude_message_entry = ttk.Entry(message_frame, width=50)
+        self.claude_message_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5, pady=2)
+        self.claude_message_entry.insert(0, "HI")
+        ttk.Button(message_frame, text="Send ClaudeAI", command=self.send_claude_message).grid(
+            row=1, column=0, columnspan=2, pady=5
+        )
+        ttk.Label(message_frame, text="Response:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=2)
+        self.claude_response_text = scrolledtext.ScrolledText(message_frame, height=8, width=70)
+        self.claude_response_text.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=2)
+
+        log_frame = ttk.LabelFrame(main_frame, text="ClaudeAI Log", padding="5")
+        log_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        self.claude_log_text = scrolledtext.ScrolledText(log_frame, height=6, width=70)
+        self.claude_log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(4, weight=1)
+        auth_frame.columnconfigure(1, weight=1)
+        message_frame.columnconfigure(1, weight=1)
+        message_frame.rowconfigure(3, weight=1)
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(0, weight=1)
+
+    def add_labeled_entry(self, parent, row, label, value):
+        ttk.Label(parent, text=label).grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
+        entry = ttk.Entry(parent, width=70)
+        entry.grid(row=row, column=1, sticky=(tk.W, tk.E), padx=5, pady=2)
+        entry.insert(0, value)
+        return entry
         
     def log_message(self, message):
         """添加日誌消息"""
         self.log_text.insert(tk.END, f"{message}\n")
         self.log_text.see(tk.END)
+
+    def log_claude_message(self, message):
+        self.claude_log_text.insert(tk.END, f"{message}\n")
+        self.claude_log_text.see(tk.END)
+
+    def open_claude_page(self):
+        webbrowser.open("https://claude.ai/new")
+        self.log_claude_message("Opened ClaudeAI. Use DevTools Network to copy manual fields.")
+
+    def show_claude_sop(self):
+        sop = (
+            "ClaudeAI Web reverse proxy SOP:\n"
+            "1. Open https://claude.ai/new and log in.\n"
+            "2. Press F12, open Network, enable Preserve log.\n"
+            "3. Send HI in ClaudeAI.\n"
+            "4. Find POST /api/organizations/{org}/chat_conversations/{conversation}/completion.\n"
+            "5. Copy Organization ID and Conversation ID from URL.\n"
+            "6. Copy Cookie, Anthropic-Device-Id, User-Agent from Request Headers.\n"
+            "7. Copy Request Payload JSON into Payload Template.\n"
+            "8. Do not commit Cookie/sessionKey/routingHint to GitHub.\n"
+        )
+        self.claude_response_text.delete(1.0, tk.END)
+        self.claude_response_text.insert(tk.END, sop)
+        self.log_claude_message("Displayed ClaudeAI Network SOP")
+
+    def send_claude_message(self):
+        try:
+            message = self.claude_message_entry.get().strip()
+            if not message:
+                messagebox.showwarning("Warning", "Please enter a ClaudeAI message")
+                return
+
+            base_url = self.claude_base_url_entry.get().strip() or "https://claude.ai"
+            org_id = self.claude_org_entry.get().strip()
+            conversation_id = self.claude_conversation_entry.get().strip()
+            cookie = self.claude_cookie_text.get(1.0, tk.END).strip()
+            device_id = self.claude_device_entry.get().strip()
+            user_agent = self.claude_user_agent_entry.get().strip()
+            payload_template = self.claude_payload_text.get(1.0, tk.END).strip()
+
+            if not org_id or not conversation_id or not cookie:
+                messagebox.showwarning("Missing fields", "ClaudeAI requires Organization ID, Conversation ID, and Cookie")
+                self.log_claude_message("Missing Organization ID, Conversation ID, or Cookie")
+                return
+
+            request_body = {
+                "provider": "claude_web",
+                "messages": [{"role": "user", "content": message}],
+                "stream": True,
+                "claude": {
+                    "base_url": base_url,
+                    "organization_id": org_id,
+                    "conversation_id": conversation_id,
+                    "cookie": cookie,
+                    "device_id": device_id,
+                    "user_agent": user_agent,
+                    "payload_template": payload_template,
+                },
+            }
+
+            api_url = f"{self.proxy_server.get_proxy_address()}/claude-web/completion"
+            self.log_claude_message(f"Sending ClaudeAI request to local proxy: {api_url}")
+            response = requests.post(api_url, json=request_body, timeout=30)
+
+            self.claude_response_text.delete(1.0, tk.END)
+            if response.status_code == 200:
+                self.claude_response_text.insert(tk.END, response.text[:8000])
+                self.log_claude_message("ClaudeAI proxy request completed")
+            else:
+                self.claude_response_text.insert(tk.END, f"ClaudeAI request failed: {response.status_code}\n{response.text}")
+                self.log_claude_message(f"ClaudeAI request failed: {response.status_code}")
+        except requests.exceptions.RequestException as e:
+            self.claude_response_text.delete(1.0, tk.END)
+            self.claude_response_text.insert(tk.END, f"Network error: {str(e)}")
+            self.log_claude_message(f"Network error: {str(e)}")
+        except Exception as e:
+            self.claude_response_text.delete(1.0, tk.END)
+            self.claude_response_text.insert(tk.END, f"Error: {str(e)}")
+            self.log_claude_message(f"ClaudeAI send error: {str(e)}")
 
     def auto_start_debug(self):
         """開啟時自動啟動代理並執行基本除錯"""
@@ -461,6 +629,8 @@ class ProxyGUI:
     def update_proxy_address(self):
         """更新代理位址顯示"""
         self.proxy_address_var.set(self.proxy_server.get_proxy_address())
+        if hasattr(self, "claude_proxy_address_var"):
+            self.claude_proxy_address_var.set(self.proxy_server.get_proxy_address())
     
     def test_proxy(self):
         """測試代理服務"""
