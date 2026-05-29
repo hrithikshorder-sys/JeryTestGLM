@@ -453,3 +453,31 @@ payload_template
 ```
 
 If `claude_web` is selected, the main `Send` button routes through the Claude path instead of the BigModel path.
+
+## Claude AI Proxy
+
+Current version status:
+
+- Claude AI can be proxied through the local app.
+- `claude_web` is an independent profile.
+- The proxy translates Chatbox/OpenAI style `messages` into the Claude Web completion payload.
+- The proxy translates Claude Web SSE back into OpenAI-compatible SSE before returning to the client.
+
+Claude Web request mapping:
+
+- `Organization ID` is the segment after `/api/organizations/` in the request URL.
+- `Conversation ID` is the segment after `/chat_conversations/` in the request URL.
+- `Cookie` is copied from the Claude Web request headers.
+- `Anthropic Device ID` comes from the `anthropic-device-id` header.
+- `User-Agent` comes from the browser request headers.
+
+Relevant endpoint:
+
+```text
+POST https://claude.ai/api/organizations/{organization_id}/chat_conversations/{conversation_id}/completion
+```
+
+Important note:
+
+- Cloudflare challenge requests such as `cdn-cgi/challenge-platform` are not the chat endpoint.
+- `a-api.anthropic.com/v1/b` is an internal Claude frontend request, not the main chat completion route used by the proxy.

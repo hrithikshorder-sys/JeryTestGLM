@@ -919,3 +919,47 @@ Expected:
 - No syntax errors.
 - `profile_config.local.json` includes both profiles.
 - `Record` persists Claude settings instead of only creating a template.
+
+## 20. Claude AI Proxy Working State
+
+Date: 2026-05-29
+
+### Status
+
+The current version can proxy Claude AI through the local reverse proxy.
+
+### Routing Summary
+
+- `claude_web` is treated as an active profile.
+- Chatbox/OpenAI style `messages` are converted into the Claude Web completion payload.
+- Claude Web streaming responses are converted back into OpenAI-compatible SSE before being returned to the client.
+
+### URL Mapping
+
+Claude Web chat requests use:
+
+```text
+POST https://claude.ai/api/organizations/{organization_id}/chat_conversations/{conversation_id}/completion
+```
+
+### Field Mapping
+
+- `Organization ID` comes from the `/api/organizations/` path segment.
+- `Conversation ID` comes from the `/chat_conversations/` path segment.
+- `Cookie` is stored in `profile_config.local.json` and loaded into the Claude profile.
+- `Anthropic Device ID` maps to the `anthropic-device-id` request header.
+- `User-Agent` maps to the browser user-agent header.
+
+### Exclusions
+
+- Cloudflare `cdn-cgi/challenge-platform` requests are not the chat endpoint.
+- `a-api.anthropic.com/v1/b` is not the main chat completion route.
+
+### Validation
+
+Confirm all of the following:
+
+- `profile_config.local.json` contains the `claude_web` profile.
+- The GUI can switch between `bigmodel` and `claude_web` without restarting the proxy.
+- `claude_web` sends through the Claude path and not the BigModel path.
+- The response returned to Chatbox is OpenAI-compatible SSE, not raw Claude or Cloudflare payloads.
