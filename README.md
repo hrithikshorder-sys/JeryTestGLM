@@ -481,3 +481,109 @@ Important note:
 
 - Cloudflare challenge requests such as `cdn-cgi/challenge-platform` are not the chat endpoint.
 - `a-api.anthropic.com/v1/b` is an internal Claude frontend request, not the main chat completion route used by the proxy.
+
+## From Zero Deployment SOP
+
+This section explains how to start from a clean machine and use the app with either BigModel or Claude Web. The steps below are written for GitHub users who only have the repo and need to understand what must stay open, what may be closed, and what must be copied into the local config files.
+
+### 1. Install prerequisites
+
+- Install Python 3.10 or newer.
+- Install the dependencies:
+
+```powershell
+pip install -r requirements.txt
+```
+
+### 2. Start the app
+
+Run:
+
+```powershell
+python main.py
+```
+
+This starts the desktop GUI and the local reverse proxy.
+
+### 3. Choose the provider
+
+Use the `Profile` dropdown:
+
+- `bigmodel` for BigModel proxy mode
+- `claude_web` for Claude Web proxy mode
+
+Switching profiles does not require restarting the proxy. The next request uses the selected profile.
+
+### 4. Open the web page when you need to collect request data
+
+For provider setup, you may need to open the provider web page in Chrome and inspect Network traffic.
+
+BigModel page:
+
+```text
+https://bigmodel.cn/trialcenter/modeltrial/text?modelCode=glm-5.1
+```
+
+Claude page:
+
+```text
+https://claude.ai/new
+```
+
+What to collect from the browser:
+
+- BigModel: `Authorization`, `Bigmodel-Organization`, `Bigmodel-Project`, `Model ID`
+- Claude Web: `Organization ID`, `Conversation ID`, `Cookie`, `Anthropic Device ID`, `User-Agent`
+
+### 5. Can the web page be closed?
+
+Yes, after you have copied the needed values into the local profile file or GUI fields, the browser page can be closed.
+
+Keep the browser open only when:
+
+- you are still collecting request values
+- you are still validating the Network tab
+- you want to inspect the live request/response flow
+
+Once the values are saved into `auth_config.local.json` or `profile_config.local.json`, the app itself does not depend on the browser remaining open.
+
+### 6. Local files the app uses
+
+- `auth_config.local.json` stores BigModel credentials
+- `profile_config.local.json` stores the active provider profile and Claude Web fields
+
+Use the GUI buttons:
+
+- `Create JSON` to create a template
+- `Reload JSON` to reload values from disk
+- `Record` on the Claude section to save the current Claude fields
+
+### 7. How the request flow works
+
+BigModel:
+
+```text
+Chatbox/OpenAI messages -> local proxy -> BigModel prompt payload -> BigModel SSE -> OpenAI-compatible SSE
+```
+
+Claude Web:
+
+```text
+Chatbox/OpenAI messages -> local proxy -> Claude Web completion payload -> Claude SSE -> OpenAI-compatible SSE
+```
+
+### 8. What to expect in the browser
+
+If you are collecting Claude Web data, the important request is:
+
+```text
+POST https://claude.ai/api/organizations/{organization_id}/chat_conversations/{conversation_id}/completion
+```
+
+The browser may also show Cloudflare challenge requests such as `cdn-cgi/challenge-platform`. Those are not the chat endpoint.
+
+### 9. GitHub-user summary
+
+- You do not need to keep the provider web page open after the required values are copied.
+- You do need to keep the local app running if you want the proxy to stay available.
+- You only need to reopen the provider page when cookies, sessions, or other request values expire.

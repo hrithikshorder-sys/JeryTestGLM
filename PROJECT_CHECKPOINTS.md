@@ -963,3 +963,69 @@ Confirm all of the following:
 - The GUI can switch between `bigmodel` and `claude_web` without restarting the proxy.
 - `claude_web` sends through the Claude path and not the BigModel path.
 - The response returned to Chatbox is OpenAI-compatible SSE, not raw Claude or Cloudflare payloads.
+
+## 21. From Zero Deployment SOP
+
+Date: 2026-06-01
+
+### Goal
+
+Provide a clean deployment and onboarding flow for GitHub users who start from the repository and need to run the proxy locally.
+
+### Start From Zero
+
+1. Install Python 3.10+.
+2. Install dependencies with `pip install -r requirements.txt`.
+3. Start the app with `python main.py`.
+4. Keep the GUI running while the proxy is being used.
+
+### When a Web Page Must Be Opened
+
+Open the provider web page only when you need to inspect request data in Chrome DevTools.
+
+BigModel page:
+
+```text
+https://bigmodel.cn/trialcenter/modeltrial/text?modelCode=glm-5.1
+```
+
+Claude page:
+
+```text
+https://claude.ai/new
+```
+
+### What to Copy From the Web Page
+
+BigModel:
+
+- `Authorization`
+- `Bigmodel-Organization`
+- `Bigmodel-Project`
+- `Model ID`
+
+Claude Web:
+
+- `Organization ID`
+- `Conversation ID`
+- `Cookie`
+- `Anthropic Device ID`
+- `User-Agent`
+
+### Can the Web Page Be Closed?
+
+Yes.
+
+Once the needed values are copied into `auth_config.local.json` or `profile_config.local.json`, the browser page can be closed.
+
+Keep it open only while:
+
+- inspecting live Network requests
+- copying request headers or URLs
+- refreshing cookies or sessions after expiry
+
+### Proxy Behavior
+
+- The local proxy runs independently from the browser.
+- Switching profiles does not require restarting the proxy.
+- Reopening the browser is only needed when the upstream provider session expires or the user wants to inspect Network again.
